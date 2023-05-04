@@ -1,0 +1,55 @@
+"""An AWS Python Pulumi program"""
+
+import pulumi
+import json
+import pulumi_aws as aws
+#from pulumi_aws import aws
+
+queue = aws.sqs.Queue("sqs-6april-pulumi",
+    content_based_deduplication=True,
+    fifo_queue= True)
+
+config = pulumi.Config()
+lambda_function_name = config.get("lambda-6april-pulumi")
+if lambda_function_name is None:
+    lambda_function_name = "lambda_function_name"
+# This is to optionally manage the CloudWatch Log Group for the Lambda Function.
+# If skipping this resource configuration, also add "logs:CreateLogGroup" to the IAM policy below.
+example = aws.cloudwatch.LogGroup("example", retention_in_days=14)
+lambda_logging_policy_document = aws.iam.get_policy_document(statements=[aws.iam.GetPolicyDocumentStatementArgs(
+    effect="Allow",
+    actions=[
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+    ],
+    resources=["arn:aws:logs:*:*:*"],
+)])
+lambda_logging_policy = aws.iam.Policy("lambdaLoggingPolicy",
+    path="/",
+    description="IAM policy for logging from a lambda",
+    policy=lambda_logging_policy_document.json)
+
+# test_role = aws.iam.Role("testRole",
+#     assume_role_policy=json.dumps({
+#     "Version": "2012-10-17",
+#     "Statement": [
+#         {
+#             "Effect": "Allow",
+#             "Principal": {
+#                 "Service": "lambda.amazonaws.com"
+#             },
+#             "Action": "sts:AssumeRole"
+#         }
+#     ]
+# })
+# )
+
+lambda_logs = aws.iam.RolePolicyAttachment("lambdaLogs",
+    role=test_role.name,
+    policy_arn=lambda_logging_policy.arn)
+
+test_lambda = aws.lambda_.Function("testLambda", opts=pulumi.ResourceOptions(depends_on=[
+        lambda_logs,
+        example,
+    ]))
